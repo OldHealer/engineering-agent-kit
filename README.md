@@ -1,43 +1,101 @@
+<div align="center">
+
 # Engineering Agent Kit
 
-**От PRD до проверенной реализации — с понятными заданиями, отдельными рабочими папками и сохранённым контекстом.**
+### Clear tasks. Shared context. Tested code.
 
-Kit помогает организовать разработку с Codex: разобрать требования, разделить фичу на задачи, реализовать их в отдельных сессиях, провести QA и ревью. Управляющая сессия собирает результаты через общие артефакты в Obsidian. Пользователь управляет приоритетами и принимает решения.
+A local toolkit for building features with Codex — from a PRD to QA and review.
 
-Это локальный инструмент для Linux/WSL. Роли по умолчанию выполняются последовательно; отдельные сессии открывает пользователь. Kit не создаёт обязательную команду параллельных агентов.
+[![Checks](https://github.com/OldHealer/engineering-agent-kit/actions/workflows/checks.yml/badge.svg)](https://github.com/OldHealer/engineering-agent-kit/actions/workflows/checks.yml)
+[![MIT License](https://img.shields.io/badge/license-MIT-2563eb?style=flat-square)](LICENSE)
+![Platform](https://img.shields.io/badge/platform-Linux%20%2F%20WSL-7c3aed?style=flat-square)
+![Status](https://img.shields.io/badge/status-MVP-f59e0b?style=flat-square)
 
-[Быстрый старт](#быстрый-старт) · [Первая фича](#первая-фича-по-prd) · [Skills](#skills) · [Настройки](#локальные-настройки) · [Безопасность](#границы-самостоятельной-работы)
+[Quick start](#quick-start) · [Your first feature](#your-first-feature) · [Skills](#skills) · [Permissions](#permissions-and-approvals)
 
-## Что даёт kit
+</div>
 
-- **Один процесс работы:** требования → план → реализация → QA → ревью.
-- **Контекст между сессиями:** задания, решения и отчёты сохраняются в Obsidian.
-- **Изоляцию задач:** worktree либо работа в текущей папке по согласованному режиму.
-- **Подключения к сервисам:** GitHub, Bitbucket Server, Jira и Confluence через MCP.
-- **Управляемую самостоятельность:** локальные проверки без лишних вопросов, отдельное согласование значимых действий.
+---
+
+Kit helps you split a feature into small tasks, work in separate sessions, and keep plans and reports in Obsidian. A main session tracks progress. **You set priorities and approve key decisions.**
+
+| Plan clearly | Build step by step | Keep the context |
+| :--- | :--- | :--- |
+| Read a PRD, list tasks, and agree on a plan. | Use a task session and run QA and code review. | Save decisions and reports in Obsidian for the next session. |
+
+> [!NOTE]
+> Kit runs locally on **Linux or WSL**. By default, one agent works through the roles in order. You open task sessions yourself. Parallel agents are optional.
+
+## How it works
 
 ```mermaid
 flowchart LR
-    PRD[PRD / требования] --> Hub[Управляющая сессия]
-    Hub --> Task[Задание задачи]
-    Task --> Plan[План]
-    Plan --> Dev[Реализация]
-    Dev --> QA[QA и ревью]
-    QA --> Report[Отчёт в Obsidian]
-    Report --> Hub
+    subgraph Feature["1 · Main session"]
+        direction TB
+        PRD("Read the PRD") --> Hub("Plan the feature")
+        Hub --> Brief("Write a task brief")
+    end
+
+    subgraph Task["2 · Task session"]
+        direction TB
+        Plan("Prepare a plan") --> Approval{"You approve"}
+        Approval --> Build("Write the code")
+        Build --> Check("Run QA and review")
+    end
+
+    subgraph Notes["3 · Shared notes"]
+        direction TB
+        Report("Save a report in Obsidian") --> Status("Update the feature status")
+    end
+
+    Feature --> Task --> Notes
+    Notes -.->|Next task| Feature
+
+    classDef blue fill:#eff6ff,stroke:#3b82f6,color:#1e3a8a
+    classDef violet fill:#f5f3ff,stroke:#8b5cf6,color:#4c1d95
+    classDef green fill:#ecfdf5,stroke:#10b981,color:#064e3b
+    classDef amber fill:#fffbeb,stroke:#f59e0b,color:#78350f
+    class PRD,Hub,Brief blue
+    class Plan,Build,Check violet
+    class Report,Status green
+    class Approval amber
+    style Feature fill:#f8fafc,stroke:#cbd5e1,color:#334155
+    style Task fill:#f8fafc,stroke:#cbd5e1,color:#334155
+    style Notes fill:#f8fafc,stroke:#cbd5e1,color:#334155
 ```
 
-## Быстрый старт
+| Who | Main job |
+| :--- | :--- |
+| **You** | Choose priorities, approve plans, and decide when to publish. |
+| **Main session** | Track the feature, prepare task briefs, and read reports. |
+| **Task session** | Plan one task, write code after approval, and check the result. |
 
-### 1. Проверьте окружение
+## Quick start
 
-Нужны Python 3.11+, Git, Node.js 22.12+ и Codex CLI. Scanner runtime проверен с Codex 0.166.0 и 0.167.0. Новые версии требуют проверки совместимости.
+**Choose your setup:**
 
-Для MCP пока нужны готовые зависимости ai-box: MCP SDK, zod и собранные клиенты Bitbucket/Jira. Установщик их не скачивает. Kit пока не является полностью автономным пакетом для установки одной командой.
+| Setup | What you get | Start here |
+| :--- | :--- | :--- |
+| **Full kit** | Skills, MCP connections, project workspaces, and a permission profile | Follow steps 1–4 below |
+| **Skills only** | The seven skills in your usual Codex session | [Install skills only](#skills-only) |
 
-### 2. Заполните личную конфигурацию
+### 1. Get the project
 
-Из корня клонированного kit:
+You need Python 3.11+, Git, Node.js 22.12+, and Codex CLI. The scanner runtime has been tested with Codex 0.166.0 and 0.167.0. Check compatibility before using a newer version.
+
+> [!IMPORTANT]
+> Full setup also needs ready-to-use **ai-box dependencies**: the MCP SDK, zod, and built Bitbucket/Jira clients. The installer does not download them. Kit is not yet a complete one-command install.
+
+Get the project:
+
+```bash
+git clone https://github.com/OldHealer/engineering-agent-kit.git
+cd engineering-agent-kit
+```
+
+### 2. Set up your local files
+
+From the kit folder:
 
 ```bash
 mkdir -p .engineering-kit
@@ -45,187 +103,203 @@ cp config/local.example.json .engineering-kit/local.json
 cp config/connections.example .engineering-kit/connections.env
 ```
 
-Откройте эти локальные файлы **самостоятельно** и заполните параметры. Не вставляйте токены в чат.
+> [!CAUTION]
+> Fill in these local files **yourself**. Do not paste tokens into a chat. Git ignores this folder, and the agent must not read `connections.env`.
 
-В `local.json` укажите абсолютный путь `ai_box`, дополнительные `network_hosts` и точные списки `mcp_hosts` для используемых сервисов. Без локального файла корпоративные хосты не разрешены. Списки доступа задаются явно и не выводятся автоматически из секретных подключений.
+In `local.json`, set the full `ai_box` path. Add `network_hosts` and exact `mcp_hosts` lists for the services you use. Company hosts are not allowed by default. A service address in the secret file does not add network access automatically.
 
-В `connections.env` задайте адреса и токены нужных сервисов. Файл разбирает только процесс MCP, без исполнения shell. Агент не должен читать его содержимое. Все файлы `.engineering-kit/` игнорируются Git.
+In `connections.env`, set the service addresses and tokens. Only the MCP process reads this file. It reads data without running shell commands. The agent must not read its contents. Git ignores everything in `.engineering-kit/`.
 
-### 3. Установите kit
+**Ready for the next step:** your dependency path and service settings are filled in locally.
+
+### 3. Install kit
 
 ```bash
 python3 scripts/launch.py install
 ```
 
-При желании подключите Context7 для публичной документации библиотек:
+You can also connect Context7 for public library documentation:
 
 ```bash
 python3 scripts/launch.py install --with-context7
 ```
 
-Установщик создаёт `~/.local/bin/kit`, ссылки на семь skills и отдельный профиль Codex. Убедитесь, что `~/.local/bin` находится в `PATH`. Существующие конфликтующие настройки не перезаписываются. Зависимости и токены автоматически не устанавливаются.
+The installer creates `~/.local/bin/kit`, links to seven skills, and a separate Codex permission profile. Make sure `~/.local/bin` is in your `PATH`. If existing settings conflict, the installer keeps them and stops. It does not install dependencies or tokens for you.
 
-Не перемещайте каталог kit после установки: ссылки используют его расположение.
+> [!TIP]
+> Keep the kit folder in the same location after installation. The links use this path.
 
-### 4. Начните работу в проекте
+### 4. Open your project
 
 ```bash
 cd /absolute/path/to/project
 kit
 ```
 
-Первое сообщение:
+Send this first message:
 
-> Подключи этот проект к kit. Обнаружь репозитории и предложи режим работы.
+> Connect this project to kit. Find its repositories and suggest a workspace mode.
 
-Kit согласует репозитории и режим `current` либо `worktree`. Регистрация сама по себе не создаёт рабочую копию задачи и не разрешает реализацию.
+Kit asks you to confirm the repositories and choose `current` or `worktree` mode. Registration alone does not create a task workspace or allow code changes.
 
-**Продолжить сессию с настройками kit:**
+### Resume your work
+
+Use the project folder you started from:
 
 ```bash
 kit resume
-# либо:
+# Or choose a session by ID:
 kit resume SESSION_UUID
 ```
 
-`kit resume --last` выбирает последнюю сессию соответствующей папки. Обычный `codex resume` продолжает историю через системный Codex; оболочка kit при этом не применяется.
+`kit resume --last` opens the latest session for that folder. Plain `codex resume` uses your system Codex and does not run the kit wrapper.
 
-Для работы над самим набором:
+To work on kit itself:
 
 ```bash
 kit start --project /absolute/path/to/kit --kit-development
 ```
 
-Если нужны только skills без MCP и профиля:
+### Skills only
+
+Want to try the workflow without MCP setup? From the cloned kit folder, run:
 
 ```bash
 python3 scripts/kit.py install-skills
 ```
 
-После этого их можно вызывать в обычном Codex.
+Then open your project in a normal Codex session. You can use the skills there. This option does not enable the kit permission profile or Git MCP.
 
-## Первая фича по PRD
+## Your first feature
 
-### Управляющая сессия
+A PRD is a product requirements document. It can describe one task or a feature with several tasks. Kit does not require a fixed PRD format.
 
-Откройте `kit` в папке проекта и передайте запрос:
+### 1. Plan the feature
 
-```text
-$feature-hub Разбери PRD <путь или ссылка>.
-Веди фичу в <папка фичи в Obsidian>.
-Подготовь карту задач, зависимости и предложи первую задачу.
-Код пока не меняй.
-```
-
-Хаб читает требования, фиксирует вопросы и готовит задания. Перед реализацией согласуйте декомпозицию и необходимые решения.
-
-### Сессия отдельной задачи
-
-Откройте другую сессию kit из того же проекта:
+Open `kit` in your project folder and send:
 
 ```text
-$plan-feature Прочитай задание <путь к заданию> и подготовь план.
+$feature-hub Read the PRD at <path or link>.
+Track this feature in <feature folder in Obsidian>.
+List the tasks and their dependencies. Suggest the first task.
+Do not change code yet.
 ```
 
-В режиме worktree свежая согласованная копия готовится **до анализа кода**, даже для запроса «только план». Подготовка worktree не разрешает реализацию. В режиме current используется согласованная исходная папка; чужие правки не включаются автоматически.
+The feature hub reads the requirements, records open questions, and writes task briefs. Agree on the task list and key decisions before starting implementation.
 
-После согласования плана:
+### 2. Work on one task
+
+Open another kit session from the same project:
 
 ```text
-Реализуй согласованный план. Выполни проверки и сохрани отчёт.
-Без commit, push и PR.
+$plan-feature Read the task brief at <path> and prepare a plan.
 ```
 
-### Проверка и следующий шаг
+In `worktree` mode, kit prepares a fresh copy from the agreed base **before reading the code**, even for a plan-only request. Creating a worktree does not allow implementation yet.
 
-Для отдельной QA-сессии:
+In `current` mode, kit uses the agreed project folder. It does not automatically include changes from other work.
+
+> [!IMPORTANT]
+> A prepared workspace or a finished plan is not approval to write code.
+
+After you approve the plan:
 
 ```text
-$verify-feature Проверь реализацию по заданию <путь>.
+Implement the agreed plan. Run the checks and save a report.
+Do not commit, push, or create a PR.
 ```
 
-Для ревью:
+### 3. Check the result and return to the hub
+
+For a separate QA session:
 
 ```text
-$review-pr Проверь текущие незакоммиченные изменения.
+$verify-feature Check the implementation against the task brief at <path>.
 ```
 
-Затем вернитесь в хаб:
+For code review:
 
 ```text
-Прочитай отчёты задачи <ID>, обнови статус и предложи следующий шаг.
+$review-pr Review the current uncommitted changes.
 ```
 
-Хаб не запускается по расписанию и не получает результаты автоматически. Вы просите его собрать актуальные артефакты.
+Then return to the main session:
+
+```text
+Read the reports for task <ID>, update its status, and suggest the next step.
+```
+
+The hub does not run on a schedule or receive results automatically. Ask it to read the latest reports.
 
 ## Skills
 
-| Skill | Когда использовать |
+| Skill | Use it for |
 | --- | --- |
-| `$feature-hub` | Координация нескольких задач по PRD |
-| `$plan-feature` | Планирование и реализация одной задачи |
-| `$verify-feature` | Проверка критериев задачи или фичи |
-| `$review-pr` | Ревью PR, ветки или локальных изменений |
-| `$investigate-bug` | Исследование причины дефекта |
-| `$workspace-cleanup` | Проверка и согласованная очистка worktree |
-| `$library-docs` | Документация API для версии библиотеки проекта |
+| `$feature-hub` | Track several tasks from a PRD |
+| `$plan-feature` | Plan and implement one task |
+| `$verify-feature` | Check task or feature acceptance criteria |
+| `$review-pr` | Review a PR, branch, or local changes |
+| `$investigate-bug` | Find the cause of a bug |
+| `$workspace-cleanup` | Check worktrees and remove approved folders |
+| `$library-docs` | Find API documentation for the library version in your project |
 
-Context7 подключается отдельно. В публичные запросы документации нельзя передавать исходники, секреты и внутренние материалы задач.
+Context7 is a separate, optional connection. Do not send source code, secrets, or private task details in public documentation requests.
 
-## Локальные настройки
+## Local settings
 
-| Где хранится | Назначение | Попадает в Git |
+| File or location | Purpose | Included in Git? |
 | --- | --- | --- |
-| `config/local.example.json` | Шаблон путей и списков хостов | Да, только заглушки |
-| `config/connections.example` | Шаблон переменных подключений | Да, только заглушки |
-| `.engineering-kit/local.json` | Настройки конкретной установки | Нет |
-| `.engineering-kit/connections.env` | Адреса сервисов и токены | Нет |
-| `.engineering-kit/project.json`, `runs/`, `workspaces/` | Локальное состояние задач и Git backend | Нет |
-| `~/.codex/kit-autonomy.json` | Личная политика, artifact-root, сеть, выбранный backend | Вне репозитория |
-| Obsidian | Полные планы, задания и отчёты | Вне репозитория |
+| `config/local.example.json` | Example paths and host lists | Yes, placeholders only |
+| `config/connections.example` | Example connection variables | Yes, placeholders only |
+| `.engineering-kit/local.json` | Settings for your installation | No |
+| `.engineering-kit/connections.env` | Service addresses and tokens | No |
+| `.engineering-kit/project.json`, `runs/`, `workspaces/` | Local project and task state | No |
+| `~/.codex/kit-autonomy.json` | Personal permissions, artifact folders, network rules, and backend choice | Outside the repository |
+| Obsidian | Full plans, task briefs, and reports | Outside the repository |
 
-Путь к зависимостям можно также явно передать через `--ai-box PATH` либо `KIT_AI_BOX`. Личные пути, домены и токены не следует добавлять в исходники или шаблоны.
+You can also set the dependency path with `--ai-box PATH` or `KIT_AI_BOX`. Keep personal paths, company domains, and tokens out of source files and public templates.
 
-**Важно:** `.gitignore` не удаляет уже закоммиченные данные и не проверяет содержимое файлов. Перед commit/push нужны проверки точного состава и возможных утечек. Файлы с секретными именами, `.env`, приватные ключи и личные артефакты запрещены к публикации.
+> [!WARNING]
+> `.gitignore` does not remove already committed data or check file contents. Review the exact files before a commit or push. Never publish secret files, `.env` files, private keys, or personal task records.
 
-### Где будут артефакты
+### Where reports are saved
 
-Выберите папку задачи в своём Obsidian vault один раз и передайте путь в хаб или задание. Там сохраняются полные планы и отчёты. Проектные копии и ссылки допустимы только локально под `.engineering-kit/`.
+Choose a task folder in your Obsidian vault and pass its path to the hub or task session. Full plans and reports go there. Local project copies and links must stay under `.engineering-kit/`.
 
-Для разрешения записи в папку:
+To allow writes to a folder:
 
 ```bash
 kit policy --artifact-root /absolute/path/to/vault/tasks
 ```
 
-Команда показывает предпросмотр. После проверки повторите параметры с выданным `--apply TOKEN`. Не используйте буквальное TOKEN из примеров.
+This shows a preview. Review it, then repeat the same options with the returned `--apply TOKEN`. Replace `TOKEN` with the real confirmation token.
 
-В начале заметки сохраняются сведения о сессии и команды продолжения. Файлы и каталоги с password, secret, credential или «парол» в имени остаются закрытыми независимо от доступа к vault.
+Each note starts with the session details and commands to resume it. Files and folders with `password`, `secret`, `credential`, or the Russian word part `парол` in their names stay blocked, even when the vault allows writes.
 
-## Границы самостоятельной работы
+## Permissions and approvals
 
-Рекомендуемый режим локальной работы:
+Recommended settings for local work:
 
 ```bash
 kit policy --local-commit confirm --locked-dependencies auto
 ```
 
-Применение — после предпросмотра, с теми же параметрами и `--apply TOKEN`.
+Review the preview, then repeat the same options with `--apply TOKEN`.
 
-| Действие | Поведение |
+| Action | Behavior |
 | --- | --- |
-| Чтение, правки по задаче, изученные build/lint/types/tests | Самостоятельно в разрешённом окружении |
-| Восстановление зависимостей по lock | Самостоятельно в выбранном auto-режиме, после проверки scripts и изоляции |
-| Commit | Согласование состава и текста в режиме confirm |
-| Новые зависимости, сервисы, миграции | Согласование |
-| Удаление пользовательских данных, push, внешние комментарии | Отдельное разрешение |
-| Реальные секреты и закрытые данные БД | Запрет доступа |
+| Read code, make agreed changes, run checked build/lint/type/test commands | Run without extra approval in the allowed environment |
+| Restore dependencies from a lock file | Run in `auto` mode after checking scripts and isolation |
+| Commit | Approve the files and message in `confirm` mode |
+| Add dependencies, manage services, or run database migrations | Ask for approval |
+| Delete user data, push, or publish external comments | Ask for separate permission |
+| Read real secrets or protected database data | Access is blocked |
 
-Для uv используется `sync --locked`, pnpm — `install --frozen-lockfile`, Yarn — режим immutable/frozen своей версии; npm — `ci`. Отсутствующий lock или изменения manifest требуют решения пользователя.
+Use `uv sync --locked`, `pnpm install --frozen-lockfile`, or the immutable/frozen option for your Yarn version. For npm, use `ci`. If there is no lock file, or a manifest needs to change, ask the user first.
 
-Название команды не доказывает её безопасность: тест или install-script может затронуть рабочую БД. Префиксные правила не анализируют произвольный код. Sandbox, ограничения MCP и оценка реальных последствий дополняют друг друга. Выход за разрешённые границы может потребовать технического подтверждения.
+A command name does not prove that it is safe. A test or install script may change a real database. Prefix rules cannot inspect all possible code. The sandbox, MCP limits, and the agent's checks work together. Actions outside the allowed area may still need technical approval.
 
-### Сеть
+### Network access
 
 ```bash
 kit network --project /absolute/path/to/project
@@ -233,23 +307,25 @@ kit policy --network-profile python --network-profile node
 kit policy --project /absolute/path/to/project --network-allow registry.example.com
 ```
 
-`kit network` показывает потребности без выдачи доступа. Команды `policy` требуют preview/apply. Общие правила наследуются проектами, проектные дополнения — только выбранным корнем и вложенными папками; deny имеет приоритет. Сеть команд проходит через прокси; MCP используют собственные точные списки хостов. Секретный файл не используется для автоматического расширения доступа.
+`kit network` shows what the project needs. It does not grant access. Policy changes use preview/apply. Global rules apply to all projects. Project rules apply only to that project folder and its child folders. Deny rules take priority.
 
-## Ограничения MVP
+Shell commands use a network proxy. MCP services use their own exact host lists. The secret connection file does not grant more network access.
 
-- Полный режим рассчитан на Linux/WSL; Windows без WSL и macOS не проверены.
-- MCP пока используют готовые внешние зависимости ai-box.
-- Native sandbox зависит от версии Codex. Для закрытых каталогов может понадобиться проверенный root-owned scanner; `kit scanner` показывает план установки, не применяет его автоматически.
-- Патч Codex 0.167.0 для уплотнения повторных deny-масок хранится в `patches/`. Сборка backend выполняется отдельно; kit не скачивает и не подменяет системный Codex автоматически.
-- Проверенный private backend выбирается через `kit policy --runtime-executable PATH` с preview/apply. Его компоненты проверяются перед запуском; `--clear-runtime` позволяет отозвать выбор. Подробности — [agents/permissions.md](agents/permissions.md).
-- Подключения к конкретной компании, доверие корпоративным CA и доступность сервисов настраиваются локально. Проверка TLS не отключается.
-- Создание PR не поддерживается. Публикации и push требуют отдельного поручения.
+## MVP limits
 
-## Проверки и вклад
+- Full mode targets Linux/WSL. Windows without WSL and macOS have not been tested.
+- MCP needs prepared external ai-box dependencies.
+- The native sandbox depends on the Codex version. Some protected folders may need the checked scanner owned by root. `kit scanner` shows an installation plan; it does not apply it automatically.
+- The Codex 0.167.0 patch in `patches/` reduces repeated deny masks. Build the backend separately. Kit does not download or replace your system Codex automatically.
+- Select a checked private backend with `kit policy --runtime-executable PATH` and preview/apply. Kit checks its components before launch. Use `--clear-runtime` to remove this choice. See [agents/permissions.md](agents/permissions.md) for details.
+- Set up company connections and corporate CA trust locally. TLS checks stay enabled.
+- Kit does not create PRs. Publishing and pushing need separate instructions.
 
-CI проверяет состав публикации, синтаксис Python/JavaScript и автономные тесты конфигурации. Он не подтверждает работу native sandbox, корпоративных интеграций или полный цикл разработки.
+## Checks and contributions
 
-В подготовленном локальном окружении полный набор запускается так:
+CI checks the publication files, Python/JavaScript syntax, and standalone configuration tests. It does not verify the native sandbox, company services, or the full development workflow.
+
+In a prepared local environment, run the full checks with:
 
 ```bash
 python3 scripts/check_publication.py
@@ -257,29 +333,36 @@ python3 -m unittest discover -s tests -v
 node --test tests/test_mcp.mjs tests/test_git_mcp.mjs
 ```
 
-Полный набор требует Codex и подготовленных ai-box зависимостей; отдельные тесты создают вложенный sandbox. MCP-тесты используют синтетические подключения и локальный HTTP-сервер. Не подставляйте рабочие токены и данные в fixtures.
+The full suite needs Codex and ready-to-use ai-box dependencies. Some tests create a nested sandbox. MCP tests use synthetic connections and a local HTTP server. Never put working tokens or real data in test fixtures.
 
-Для сообщения об ошибке укажите ОС, версии инструментов, команду и безопасное описание ожидаемого/фактического результата. Не прикладывайте connections.env, токены, личные конфиги, дампы БД и полные журналы с чувствительными данными. Возможную утечку сначала устраните локально; не публикуйте сам секрет в issue.
+When reporting a bug, include your OS, tool versions, command, and a safe description of the expected and actual result. Do not attach `connections.env`, tokens, personal configs, database dumps, or full logs with sensitive data. Handle a possible leak privately first. Never post the secret itself in an issue.
 
-Предлагайте небольшие изменения с описанием проверки и ограничений. Правила работы с кодом — в [AGENTS.md](AGENTS.md). Проверка публикации покрывает только известные имена и форматы: ручной просмотр состава перед push остаётся обязательным.
+Keep proposed changes small. Explain how you checked them and list any limits. See [AGENTS.md](AGENTS.md) for project rules. The publication check only covers known names and formats. Review the files manually before pushing.
 
-## Лицензия и сторонний код
+## License and third-party code
 
-Собственный код проекта распространяется под [MIT License](LICENSE). Она разрешает использование, изменение и распространение, включая коммерческое, с сохранением уведомления об авторских правах и текста лицензии. Код предоставляется «как есть», без гарантий.
+The project's own code uses the [MIT License](LICENSE). You can use, change, and share it, including for commercial use. Keep the copyright notice and license text. The code comes as is, without warranties.
 
-Файлы `patches/codex-0.167.0-*.patch` относятся к исходному тегу [rust-v0.167.0 OpenAI Codex](https://github.com/openai/codex/tree/rust-v0.167.0). Они содержат контекст стороннего кода; исходные [LICENSE](patches/CODEX-LICENSE) и [NOTICE](patches/CODEX-NOTICE) сохранены отдельно и не являются лицензией собственного кода kit. Бинарники Codex, bubblewrap, V8 и ai-box зависимости в этот репозиторий не включены. Не следует распространять их под предполагаемой лицензией kit.
+The `patches/codex-0.167.0-*.patch` files are based on the [rust-v0.167.0 OpenAI Codex tag](https://github.com/openai/codex/tree/rust-v0.167.0). They include parts of third-party code. The original [LICENSE](patches/CODEX-LICENSE) and [NOTICE](patches/CODEX-NOTICE) are stored separately. They do not apply to kit's own code.
 
-## Структура проекта
+Codex, bubblewrap, and V8 binaries, and ai-box dependencies, are not included in this repository. Do not assume that kit's license applies to them.
+
+## Project layout
+
+<details>
+<summary>Show the project folders</summary>
 
 ```text
-agents/       роли, workflows и правила интеграций
-skills/       семь пользовательских skills
-scripts/      установка, запуск, MCP и политики
-bin/          команда kit и адаптеры scanner
-permissions/  шаблоны ограничений
-config/       безопасные шаблоны локальных настроек
-patches/      закреплённые native-исправления
-tests/       проверки на изолированных fixtures
+agents/       roles, workflows, and integration rules
+skills/       seven user skills
+scripts/      setup, launch, MCP, and permissions
+bin/          the kit command and scanner adapters
+permissions/  permission templates
+config/       safe examples for local settings
+patches/      version-specific native fixes
+tests/        checks with isolated test data
 ```
 
-Инструкции проекта: [AGENTS.md](AGENTS.md). Правила интеграций: [agents/integrations.md](agents/integrations.md).
+</details>
+
+Project rules: [AGENTS.md](AGENTS.md). Integration rules: [agents/integrations.md](agents/integrations.md).
