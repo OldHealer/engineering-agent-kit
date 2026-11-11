@@ -1,0 +1,30 @@
+name: Checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  portable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Check publication candidates
+        run: python3 scripts/check_publication.py
+      - name: Check Python syntax
+        run: python3 -m compileall -q scripts tests
+      - name: Check JavaScript syntax
+        run: |
+          for file in scripts/*.mjs tests/*.mjs; do node --check "$file"; done
+      - name: Check portable configuration behavior
+        run: |
+          python3 -m unittest discover -s tests -p test_mcp_config.py -v
+          python3 -m unittest discover -s tests -p test_local_settings.py -v
+          python3 -m unittest discover -s tests -p test_publication.py -v

@@ -1,0 +1,11 @@
+{
+  "ai_box": "/absolute/path/to/ai-box",
+  "network_hosts": [],
+  "mcp_hosts": {
+    "bitbucket": [],
+    "jira": [],
+    "confluence": [],
+    "git": ["github.com", "api.github.com"],
+    "github": ["api.github.com"]
+  }
+}

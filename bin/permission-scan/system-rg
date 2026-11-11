@@ -1,0 +1,100 @@
+#!/usr/bin/python3 -I
+"""Host-protected deny-glob scanner: недоступные поддеревья остаются deny-путями."""
+
+import errno
+import os
+from pathlib import Path
+import subprocess
+import sys
+
+
+REAL_RG = "/usr/bin/rg"
+MARKER = ["--no-config", "--files", "--hidden", "--no-ignore", "--null"]
+
+
+def scan_request(arguments):
+    if arguments[:len(MARKER)] != MARKER or "--" not in arguments:
+        return None
+    separator = arguments.index("--")
+    if len(arguments[separator + 1:]) != 1 or not Path(arguments[-1]).is_absolute():
+        return None
+    depth = None
+    index = len(MARKER)
+    while index < separator:
+        if arguments[index] not in {"--glob", "--max-depth"} or index + 1 >= separator:
+            return None
+        if arguments[index] == "--max-depth":
+            depth = int(arguments[index + 1])
+            if depth < 1:
+                return None
+        index += 2
+    return separator, Path(arguments[-1]), depth
+
+
+def unreadable_directories(root, depth):
+    denied = set()
+
+    def failure(error):
+        if error.errno in {errno.EACCES, errno.EPERM} and error.filename:
+            path = Path(os.path.abspath(error.filename))
+            if not path.is_relative_to(root):
+                raise error
+            denied.add(path)
+        elif error.errno not in {errno.ENOENT, errno.ENOTDIR}:
+            raise error
+
+    for directory, children, _ in os.walk(root, followlinks=False, onerror=failure):
+        if depth is not None and len(Path(directory).relative_to(root).parts) >= depth - 1:
+            children[:] = []
+    return sorted(denied)
+
+
+def emit(result):
+    sys.stdout.buffer.write(result.stdout)
+    sys.stderr.buffer.write(result.stderr)
+    return result.returncode
+
+
+def main():
+    arguments = sys.argv[1:]
+    try:
+        request = scan_request(arguments)
+    except ValueError:
+        request = None
+    if request is None:
+        os.execv(REAL_RG, [REAL_RG, *arguments])
+    first = subprocess.run([REAL_RG, *arguments], capture_output=True)
+    if first.returncode != 2:
+        return emit(first)
+    separator, root, depth = request
+    try:
+        closed = unreadable_directories(root, depth)
+    except OSError:
+        return emit(first)
+    if not closed:
+        return emit(first)
+    if root in closed:
+        validation = subprocess.run([REAL_RG, *arguments[:separator], "--", "/dev/null"], capture_output=True)
+        if validation.returncode not in {0, 1} or validation.stderr:
+            return emit(validation)
+        # Даже не совпадающий с маской scan-root полностью недоступен; native обязан его закрыть.
+        sys.stdout.buffer.write(os.fsencode(root) + b"\0")
+        return 0
+    exclusions = []
+    for path in closed:
+        relative = path.relative_to(root).as_posix()
+        escaped = "".join("\\" + char if char in "\\*?[]{}!" else char for char in relative)
+        exclusions += ["--glob", "!/" + escaped, "--glob", "!/" + escaped + "/**"]
+    result = subprocess.run([REAL_RG, *arguments[:separator], *exclusions, *arguments[separator:]],
+                            cwd=root, capture_output=True)
+    if result.returncode not in {0, 1} or result.stderr:
+        return emit(result)
+    sys.stdout.buffer.write(result.stdout)
+    # Пропуск обхода не снимает защиту: native получает точные deny для всех закрытых корней.
+    for path in closed:
+        sys.stdout.buffer.write(os.fsencode(path) + b"\0")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

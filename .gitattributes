@@ -1,0 +1,2 @@
+# Diff context markers contain intentional spaces; preserve upstream patches verbatim.
+patches/*.patch -whitespace

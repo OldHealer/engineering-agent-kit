@@ -1,0 +1,10 @@
+# Эти правила контролируют соответствующие запросы выполнения вне песочницы.
+# Они не являются фильтром HTTP-методов или полным анализатором скриптов.
+prefix_rule(pattern = [["git", "/usr/bin/git"], ["push", "send-pack"]], decision = "prompt", justification = "Согласуйте публикацию коммитов и целевой репозиторий")
+prefix_rule(pattern = [["git", "/usr/bin/git"], ["-C", "-c", "--git-dir", "--work-tree"]], decision = "prompt", justification = "Проверьте Git с глобальными опциями при выходе из песочницы")
+prefix_rule(pattern = ["gh", "api"], decision = "prompt", justification = "Прямой API может изменять внешний сервис")
+prefix_rule(pattern = ["gh", "pr", ["comment", "review", "merge", "create", "edit", "close"]], decision = "prompt", justification = "Изменение PR требует согласования")
+prefix_rule(pattern = [["terraform", "tofu"], ["apply", "destroy", "import"]], decision = "prompt", justification = "Изменение инфраструктуры требует согласования")
+prefix_rule(pattern = ["kubectl", ["apply", "delete", "patch", "replace", "edit", "create", "scale", "rollout"]], decision = "prompt", justification = "Изменение Kubernetes требует согласования")
+prefix_rule(pattern = [["curl", "wget"]], decision = "prompt", justification = "Прямой HTTP-запрос вне песочницы требует проверки метода и адреса")
+prefix_rule(pattern = [["bash", "sh", "zsh"], ["-c", "-lc"]], decision = "prompt", justification = "Проверьте действия shell-обёртки вне песочницы")

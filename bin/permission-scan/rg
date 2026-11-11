@@ -1,0 +1,79 @@
+#!/usr/bin/python3 -I
+"""Совместимость deny-glob scanner Codex с явно закрытыми каталогами Linux/WSL."""
+
+import json
+import os
+from pathlib import Path
+import sys
+
+
+def main():
+    arguments = sys.argv[1:]
+    policy = Path(__file__).with_name("scan-policy.json")
+    try:
+        # Файловый помощник Codex сохраняет PATH, но убирает KIT_SCAN_* из окружения.
+        settings = json.loads(policy.read_text()) if policy.is_file() else None
+        real_rg = settings["rg"] if settings is not None else os.environ.get("KIT_SCAN_RG", "/usr/bin/rg")
+    except (KeyError, ValueError, OSError, TypeError):
+        print("kit scanner: invalid runtime policy; scan refused", file=sys.stderr)
+        return 2
+    if not Path(real_rg).is_absolute() or Path(real_rg).resolve() == Path(__file__).resolve():
+        print("kit scanner: invalid rg executable", file=sys.stderr)
+        return 2
+    marker = ["--no-config", "--files", "--hidden", "--no-ignore", "--null"]
+    # Обычные команды rg передаём без изменения. Не перехватываем другие версии протокола.
+    if arguments[:len(marker)] == marker and "--" in arguments:
+        separator = arguments.index("--")
+        if len(arguments[separator + 1:]) == 1:
+            try:
+                root = Path(arguments[-1]).resolve()
+                denied = settings["denied"] if settings is not None else json.loads(os.environ["KIT_SCAN_DENIED_DIRS"])
+                if not isinstance(denied, list) or any(not isinstance(item, str) or not Path(item).is_absolute() for item in denied):
+                    raise ValueError("invalid policy")
+                exclusions = []
+                for value in denied:
+                    path = Path(value)
+                    if root.is_relative_to(path):
+                        return 1  # Весь scan-root запрещён: совпадений для маскирования внутри него не нужно.
+                    if not path.is_relative_to(root):
+                        continue
+                    relative = path.relative_to(root).as_posix()
+                    escaped = "".join("\\" + char if char in "\\*?[]{}!" else char for char in relative)
+                    # Точный каталог и потомки исключаются из обхода, не только из вывода.
+                    exclusions += ["--glob", "!/" + escaped, "--glob", "!/" + escaped + "/**"]
+                modules = settings.get("code_modules", []) if settings is not None else json.loads(os.environ.get("KIT_SCAN_CODE_MODULES", "[]"))
+                managed = settings.get("managed_globs", []) if settings is not None else json.loads(os.environ.get("KIT_SCAN_MANAGED_GLOBS", "[]"))
+                patterns = []
+                index = len(marker)
+                known_protocol = True
+                while index < separator:
+                    flag = arguments[index]
+                    if flag not in {"--glob", "--max-depth"} or index + 1 >= separator:
+                        known_protocol = False
+                        break
+                    if flag == "--glob":
+                        patterns.append(arguments[index + 1])
+                    index += 2
+                # Не меняем смысл пользовательских/управляемых масок и других протоколов rg.
+                if (modules and known_protocol and patterns and isinstance(managed, dict)
+                        and str(root) == managed.get("root") and set(patterns).issubset(managed.get("patterns", []))):
+                    support = Path(__file__).with_name("file_access.py")
+                    sys.path.insert(0, str(support.parent if support.is_file() else Path(__file__).resolve().parents[2] / "scripts"))
+                    from file_access import unchanged
+                    for module in modules:
+                        path = Path(module["path"])
+                        if path.is_relative_to(root) and unchanged(module):
+                            relative = path.relative_to(root).as_posix()
+                            escaped = "".join("\\" + char if char in "\\*?[]{}!" else char for char in relative)
+                            exclusions += ["--glob", "!/" + escaped]
+                arguments = arguments[:separator] + exclusions + arguments[separator:]
+                # Override globs rg привязываются к cwd; native scanner может вызвать нас из другого корня.
+                os.chdir(root)
+            except (KeyError, ValueError, OSError):
+                print("kit scanner: invalid deny-directory policy; scan refused", file=sys.stderr)
+                return 2
+    os.execv(real_rg, [real_rg, *arguments])
+
+
+if __name__ == "__main__":
+    sys.exit(main())

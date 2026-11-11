@@ -1,0 +1,253 @@
+--- a/codex-rs/linux-sandbox/src/bwrap.rs
++++ b/codex-rs/linux-sandbox/src/bwrap.rs
+@@ -619,8 +619,8 @@
+         .collect();
+     unreadable_ancestors_of_writable_roots.sort_by_key(|path| path_depth(path));
+ 
+-    for unreadable_root in &unreadable_ancestors_of_writable_roots {
+-        append_unreadable_root_args(&mut bwrap_args, unreadable_root, &allowed_write_paths)?;
++    for unreadable_root in compact_unreadable_roots(unreadable_ancestors_of_writable_roots) {
++        append_unreadable_root_args(&mut bwrap_args, &unreadable_root, &allowed_write_paths)?;
+     }
+ 
+     for writable_root in &sorted_writable_roots {
+@@ -752,7 +752,7 @@
+                 remap_paths_for_symlink_target(nested_unreadable_roots, root, target);
+         }
+         nested_unreadable_roots.sort_by_key(|path| path_depth(path));
+-        for unreadable_root in nested_unreadable_roots {
++        for unreadable_root in compact_unreadable_roots(nested_unreadable_roots) {
+             append_unreadable_root_args(&mut bwrap_args, &unreadable_root, &allowed_write_paths)?;
+         }
+     }
+@@ -768,7 +768,7 @@
+         .cloned()
+         .collect();
+     rootless_unreadable_roots.sort_by_key(|path| path_depth(path));
+-    for unreadable_root in rootless_unreadable_roots {
++    for unreadable_root in compact_unreadable_roots(rootless_unreadable_roots) {
+         append_unreadable_root_args(&mut bwrap_args, &unreadable_root, &allowed_write_paths)?;
+     }
+ 
+@@ -1153,6 +1153,21 @@
+ 
+ fn path_to_string(path: &Path) -> String {
+     path.to_string_lossy().to_string()
++}
++
++// Compact within a mount layer: a later writable bind must reapply its own deny masks.
++fn compact_unreadable_roots(paths: Vec<PathBuf>) -> Vec<PathBuf> {
++    let paths: BTreeSet<PathBuf> = paths.into_iter().collect();
++    paths
++        .iter()
++        .filter(|path| {
++            !path
++                .ancestors()
++                .skip(1)
++                .any(|parent| paths.contains(parent))
++        })
++        .cloned()
++        .collect()
+ }
+ 
+ fn path_depth(path: &Path) -> usize {
+@@ -1536,3 +1551,7 @@
+ #[cfg(test)]
+ #[path = "bwrap_tests.rs"]
+ mod tests;
++
++#[cfg(test)]
++#[path = "bwrap_compaction_tests.rs"]
++mod compaction_tests;
+--- /dev/null
++++ b/codex-rs/linux-sandbox/src/bwrap_compaction_tests.rs
+@@ -0,0 +1,84 @@
++use super::compact_unreadable_roots;
++use std::path::PathBuf;
++
++fn paths(values: &[&str]) -> Vec<PathBuf> {
++    values.iter().map(PathBuf::from).collect()
++}
++
++#[test]
++fn thousands_of_descendant_masks_collapse_under_an_existing_deny() {
++    let mut masks = paths(&["/project/.worktrees"]);
++    masks.extend(
++        (0..10_000).map(|index| PathBuf::from(format!("/project/.worktrees/{index}/.env"))),
++    );
++    assert_eq!(
++        compact_unreadable_roots(masks),
++        paths(&["/project/.worktrees"])
++    );
++}
++
++#[test]
++fn unrelated_masks_and_similar_prefixes_are_preserved() {
++    assert_eq!(
++        compact_unreadable_roots(paths(&[
++            "/project/private",
++            "/project/private/.env",
++            "/project/private-copy/.env",
++            "/other/.env"
++        ])),
++        paths(&[
++            "/other/.env",
++            "/project/private",
++            "/project/private-copy/.env"
++        ])
++    );
++}
++
++#[test]
++fn writable_child_layer_reapplies_the_child_masks() {
++    let masks = paths(&[
++        "/project/private",
++        "/project/private/task/.env",
++        "/project/private/task/sub/key.pem",
++    ]);
++    assert_eq!(
++        compact_unreadable_roots(masks.clone()),
++        paths(&["/project/private"])
++    );
++    let child_masks = masks
++        .into_iter()
++        .filter(|path| path.starts_with("/project/private/task"))
++        .collect();
++    assert_eq!(
++        compact_unreadable_roots(child_masks),
++        paths(&[
++            "/project/private/task/.env",
++            "/project/private/task/sub/key.pem"
++        ])
++    );
++}
++
++#[test]
++fn canonical_targets_outside_a_denied_parent_remain_masked() {
++    assert_eq!(
++        compact_unreadable_roots(paths(&[
++            "/project/private",
++            "/project/private/link/.env",
++            "/real-target/.env"
++        ])),
++        paths(&["/project/private", "/real-target/.env"])
++    );
++}
++
++#[test]
++fn duplicates_empty_input_and_root_deny_are_handled() {
++    assert!(compact_unreadable_roots(Vec::new()).is_empty());
++    assert_eq!(
++        compact_unreadable_roots(paths(&["/project/private", "/project/private"])),
++        paths(&["/project/private"])
++    );
++    assert_eq!(
++        compact_unreadable_roots(paths(&["/", "/project/.env"])),
++        paths(&["/"])
++    );
++}
+--- a/codex-rs/linux-sandbox/src/bwrap_tests.rs
++++ b/codex-rs/linux-sandbox/src/bwrap_tests.rs
+@@ -1616,3 +1616,102 @@
+         .map(|target| target.path().to_path_buf())
+         .collect()
+ }
++
++
++#[test]
++fn compaction_keeps_thousands_of_redundant_glob_masks_below_bwrap_limit() {
++    assert!(ripgrep_available(), "this regression requires real ripgrep");
++    let temporary = TempDir::new().expect("temporary directory");
++    let blocked = temporary.path().join("blocked");
++    std::fs::create_dir(&blocked).expect("blocked directory");
++    for index in 0..2_000 {
++        std::fs::write(blocked.join(format!("{index}.env")), "fixture").expect("fixture file");
++    }
++    let entry = |path: &Path, access| FileSystemSandboxEntry {
++        path: AbsolutePathBuf::from_absolute_path(path)
++            .expect("absolute path")
++            .into(),
++        access,
++        missing_path_behavior: None,
++    };
++    let policy = FileSystemSandboxPolicy::restricted(vec![
++        FileSystemSandboxEntry {
++            path: FileSystemPath::Special {
++                value: FileSystemSpecialPath::Root,
++            },
++            access: FileSystemAccessMode::Read,
++            missing_path_behavior: None,
++        },
++        entry(temporary.path(), FileSystemAccessMode::Write),
++        entry(&blocked, FileSystemAccessMode::Deny),
++        unreadable_glob_entry(format!("{}/**/*.env", temporary.path().display())),
++    ]);
++    let result = create_filesystem_args(&policy, temporary.path(), BwrapOptions::default())
++        .expect("filesystem arguments");
++    assert!(
++        result.args.len() < 9_000,
++        "redundant deny masks exceeded bwrap limit"
++    );
++    let first = path_to_string(&blocked.join("0.env"));
++    assert!(
++        !result.args.contains(&first),
++        "parent mask already hides this file"
++    );
++    assert!(result.args.windows(6).any(|window| window
++        == [
++            "--perms",
++            "000",
++            "--tmpfs",
++            blocked.to_str().unwrap(),
++            "--remount-ro",
++            blocked.to_str().unwrap(),
++        ]));
++}
++
++#[test]
++fn compaction_reapplies_secret_glob_masks_after_reopening_a_writable_child() {
++    assert!(ripgrep_available(), "this regression requires real ripgrep");
++    let temporary = TempDir::new().expect("temporary directory");
++    let blocked = temporary.path().join("blocked");
++    let child = blocked.join("allowed");
++    std::fs::create_dir_all(&child).expect("child directory");
++    let canary = child.join("fixture.env");
++    std::fs::write(&canary, "fixture").expect("fixture file");
++    let entry = |path: &Path, access| FileSystemSandboxEntry {
++        path: AbsolutePathBuf::from_absolute_path(path)
++            .expect("absolute path")
++            .into(),
++        access,
++        missing_path_behavior: None,
++    };
++    let policy = FileSystemSandboxPolicy::restricted(vec![
++        FileSystemSandboxEntry {
++            path: FileSystemPath::Special {
++                value: FileSystemSpecialPath::Root,
++            },
++            access: FileSystemAccessMode::Read,
++            missing_path_behavior: None,
++        },
++        entry(temporary.path(), FileSystemAccessMode::Write),
++        entry(&blocked, FileSystemAccessMode::Deny),
++        entry(&child, FileSystemAccessMode::Write),
++        unreadable_glob_entry(format!("{}/**/*.env", temporary.path().display())),
++    ]);
++    let result = create_filesystem_args(&policy, temporary.path(), BwrapOptions::default())
++        .expect("filesystem arguments");
++    let child = child.to_str().unwrap();
++    let rebound = result
++        .args
++        .windows(3)
++        .rposition(|window| window == ["--bind", child, child])
++        .expect("writable child bind");
++    let denied = result
++        .args
++        .iter()
++        .rposition(|arg| arg == canary.to_str().unwrap())
++        .expect("secret must remain masked inside writable child");
++    assert!(
++        denied > rebound,
++        "secret mask must follow the writable bind"
++    );
++}

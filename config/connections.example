@@ -1,0 +1,8 @@
+BB_HOST=https://bitbucket.example.com
+BB_TOKEN=<YOUR_API_KEY>
+JIRA_HOST=https://jira.example.com
+JIRA_PAT=<YOUR_API_KEY>
+CONFLUENCE_HOST=https://confluence.example.com
+CONFLUENCE_PAT=<YOUR_API_KEY>
+GITHUB_API_URL=https://api.github.com
+GITHUB_TOKEN=<YOUR_API_KEY>
