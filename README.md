@@ -4,7 +4,7 @@
 
 ### Clear tasks. Shared context. Tested code.
 
-A local toolkit for building features with Codex — from a PRD to QA and review.
+A local toolkit for building features with Codex — from a Product Requirements Document (PRD) to tested code.
 
 [![Checks](https://github.com/OldHealer/engineering-agent-kit/actions/workflows/checks.yml/badge.svg)](https://github.com/OldHealer/engineering-agent-kit/actions/workflows/checks.yml)
 [![MIT License](https://img.shields.io/badge/license-MIT-2563eb?style=flat-square)](LICENSE)
@@ -17,58 +17,23 @@ A local toolkit for building features with Codex — from a PRD to QA and review
 
 ---
 
-Kit helps you split a feature into small tasks, work in separate sessions, and keep plans and reports in Obsidian. A main session tracks progress. **You set priorities and approve key decisions.**
+Kit helps you plan a task, write code, and check the result in one session. For a feature with several linked tasks, you can add a feature hub to track progress and dependencies. **You set priorities and approve key decisions.**
 
 | Plan clearly | Build step by step | Keep the context |
 | :--- | :--- | :--- |
-| Read a PRD, list tasks, and agree on a plan. | Use a task session and run QA and code review. | Save decisions and reports in Obsidian for the next session. |
+| Read the requirements and agree on a plan. | Write code, run tests, and review the result. | Save plans and reports as artifacts, for example in Obsidian. |
 
 > [!NOTE]
-> Kit runs locally on **Linux or WSL**. By default, one agent works through the roles in order. You open task sessions yourself. Parallel agents are optional.
+> Kit runs locally on **Linux or WSL**. By default, one session works through the roles in order. A separate feature hub and parallel agents are optional.
 
 ## How it works
 
-```mermaid
-flowchart LR
-    subgraph Feature["1 · Main session"]
-        direction TB
-        PRD("Read the PRD") --> Hub("Plan the feature")
-        Hub --> Brief("Write a task brief")
-    end
+![Workflow: plan, build and check, then save a report; repeat if needed. An optional feature hub coordinates linked tasks.](assets/workflow.svg)
 
-    subgraph Task["2 · Task session"]
-        direction TB
-        Plan("Prepare a plan") --> Approval{"You approve"}
-        Approval --> Build("Write the code")
-        Build --> Check("Run QA and review")
-    end
+Role names in brackets show who does the work in the same session. Names with `$` are skills. A feature hub is an optional separate session for linked tasks.
 
-    subgraph Notes["3 · Shared notes"]
-        direction TB
-        Report("Save a report in Obsidian") --> Status("Update the feature status")
-    end
-
-    Feature --> Task --> Notes
-    Notes -.->|Next task| Feature
-
-    classDef blue fill:#eff6ff,stroke:#3b82f6,color:#1e3a8a
-    classDef violet fill:#f5f3ff,stroke:#8b5cf6,color:#4c1d95
-    classDef green fill:#ecfdf5,stroke:#10b981,color:#064e3b
-    classDef amber fill:#fffbeb,stroke:#f59e0b,color:#78350f
-    class PRD,Hub,Brief blue
-    class Plan,Build,Check violet
-    class Report,Status green
-    class Approval amber
-    style Feature fill:#f8fafc,stroke:#cbd5e1,color:#334155
-    style Task fill:#f8fafc,stroke:#cbd5e1,color:#334155
-    style Notes fill:#f8fafc,stroke:#cbd5e1,color:#334155
-```
-
-| Who | Main job |
-| :--- | :--- |
-| **You** | Choose priorities, approve plans, and decide when to publish. |
-| **Main session** | Track the feature, prepare task briefs, and read reports. |
-| **Task session** | Plan one task, write code after approval, and check the result. |
+> [!NOTE]
+> The diagram shows a general artifact step. Current kit skills require full reports in Obsidian. Local project copies stay under `.engineering-kit/`.
 
 ## Quick start
 
@@ -172,7 +137,9 @@ Then open your project in a normal Codex session. You can use the skills there. 
 
 ## Your first feature
 
-A PRD is a product requirements document. It can describe one task or a feature with several tasks. Kit does not require a fixed PRD format.
+A Product Requirements Document (PRD) can describe one task or a feature with several tasks. Kit does not require a fixed format.
+
+For one task, start with `$plan-feature` in a single session. For several linked tasks, you can use the optional feature hub workflow below.
 
 ### 1. Plan the feature
 
