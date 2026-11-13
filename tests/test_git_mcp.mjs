@@ -43,8 +43,16 @@ test('Git MCP stdio binds project, confirms mutations, commits and cleans real w
     return { error: result.isError === true, data: JSON.parse(result.content[0].text) };
   };
   const catalog = await client.listTools();
-  assert.equal(catalog.tools.length, 12);
+  assert.equal(catalog.tools.length, 17);
   assert.ok(!catalog.tools.some((tool) => /create.*pr|exec|shell/.test(tool.name)));
+  for (const action of ['fetch', 'merge', 'merge_abort']) {
+    const tool = catalog.tools.find((item) => item.name === `kit_git_${action}`);
+    assert.equal(tool.annotations.readOnlyHint, false);
+    const input = action === 'fetch' ? { repo: 'backend' } :
+      { id: 'APP-1', repo: 'backend', confirmation_token: 'a'.repeat(64) };
+    assert.equal((await call(action, input)).data.code, 'CONFIRMATION_REQUIRED');
+  }
+  assert.equal(catalog.tools.find((item) => item.name === 'kit_git_merge_preview').annotations.readOnlyHint, true);
   const discover = await call('discover');
   assert.deepEqual(discover.data.repositories, ['backend']);
   assert.equal((await call('init')).data.code, 'CONFIRMATION_REQUIRED');
@@ -102,4 +110,41 @@ test('Git MCP stdio binds project, confirms mutations, commits and cleans real w
     idle_confirmed: true, confirm: true });
   assert.equal(refused.error, true);
   assert.equal(await git('branch', '--show-current'), 'dev');
+
+  // Реальная локальная fetch-квитанция — подготовка fixture; MCP не разрешает file transport.
+  const originalHead = await git('rev-parse', 'HEAD');
+  const incoming = await git('commit-tree', await git('rev-parse', 'HEAD^{tree}'), '-p',
+    await git('rev-parse', 'main'), '-m', 'Upstream equivalent tree');
+  await git('update-ref', 'refs/heads/fixture-upstream', incoming);
+  const remote = path.join(root, 'remote.git');
+  await execute('git', ['clone', '-q', '--bare', source, remote]);
+  await execute('git', ['-C', remote, 'update-ref', 'refs/heads/main', incoming]);
+  await git('remote', 'set-url', 'origin', remote);
+  const refusedFetch = await call('fetch', { repo: 'backend', branch: 'main', confirm: true });
+  assert.equal(refusedFetch.error, true); // Ограничение origin не ослаблено ради теста.
+  await execute('/usr/bin/python3', ['-c',
+    'import sys; sys.path.insert(0, sys.argv[1]); from git_worker import WorkspaceGit; ' +
+    'WorkspaceGit(sys.argv[2], local_test=True).dispatch({"action":"fetch","repo":"backend","branch":"main","confirm":True})',
+    path.join(kitRoot, 'scripts'), project]);
+  const mergeRequest = { id: 'APP-2', repo: 'backend', revision: 'origin/main' };
+  const mergePreview = await call('merge_preview', mergeRequest);
+  assert.equal(mergePreview.error, false, JSON.stringify(mergePreview.data));
+  assert.equal(mergePreview.data.source_sha, incoming);
+  assert.equal(mergePreview.data.scenario, 'merge');
+  const mergeResult = await call('merge', { ...mergeRequest,
+    confirmation_token: mergePreview.data.confirmation_token, confirm: true });
+  assert.equal(mergeResult.error, false, JSON.stringify(mergeResult.data));
+  assert.equal(mergeResult.data.outcome, 'merged_pending_commit');
+  assert.equal(await git('rev-parse', 'HEAD'), originalHead);
+  const mergeStatus = await call('status', { id: 'APP-2' });
+  assert.deepEqual(mergeStatus.data.entries[0].merge.parents, [originalHead, incoming]);
+  const mergeCommit = { id: 'APP-2', repo: 'backend', mode: 'merge', message: 'Merge fixture main', author: commit.author };
+  const mergeCommitPreview = await call('commit_preview', mergeCommit);
+  assert.equal(mergeCommitPreview.error, false, JSON.stringify(mergeCommitPreview.data));
+  assert.deepEqual(mergeCommitPreview.data.parents, [originalHead, incoming]);
+  const done = await call('commit', { ...mergeCommit,
+    confirmation_token: mergeCommitPreview.data.confirmation_token, confirm: true });
+  assert.equal(done.error, false, JSON.stringify(done.data));
+  assert.deepEqual((await git('show', '-s', '--format=%P', 'HEAD')).split(' '), [originalHead, incoming]);
+  assert.equal(await git('status', '--porcelain'), '');
 });

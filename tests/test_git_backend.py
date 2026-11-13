@@ -337,6 +337,11 @@ class GitBackendTests(unittest.TestCase):
         git(self.source, "remote", "set-url", "origin", url)
         self.backend.connections = {"bitbucket": {"token": expected.removeprefix("Bearer ")}}
         self.call("remote_check", repo="backend")
+        before = git(self.source, "rev-parse", "HEAD")
+        fetched = self.call("fetch", repo="backend", branch="main")
+        self.assertEqual(fetched["sha"], before)
+        self.assertEqual(git(self.source, "rev-parse", "HEAD"), before)
+        self.assertFalse((self.project / ".engineering-kit/workspaces").exists())
         repo = self.prepare()
         result = self.commit(repo)
         preview = self.call("push_preview", id="APP-1", repo="backend")

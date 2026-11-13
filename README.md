@@ -278,6 +278,16 @@ kit policy --project /absolute/path/to/project --network-allow registry.example.
 
 Shell commands use a network proxy. MCP services use their own exact host lists. The secret connection file does not grant more network access.
 
+## Update a task branch from main
+
+Ask Kit to update the task branch from `origin/main`. It uses Git MCP:
+
+`fetch` → `merge_preview` → approved `merge` → fix conflicts and run checks → `commit_preview(mode="merge")` → approved `commit`.
+
+Merge keeps the old HEAD until you approve the commit, even when a fast-forward is possible. The commit preview shows the full result and both parents. Push needs a separate request. To cancel, use `merge_abort_preview` and approve the exact changes that will be lost. Extra local changes block cancellation.
+
+See [the Git MCP workflow](agents/integrations.md#обновление-ветки-задачи-из-origin) for tool arguments and limits. After updating Kit, open a new session with `kit start --project /absolute/path/to/project`; an existing chat does not gain new tools automatically.
+
 ## MVP limits
 
 - Full mode targets Linux/WSL. Windows without WSL and macOS have not been tested.
