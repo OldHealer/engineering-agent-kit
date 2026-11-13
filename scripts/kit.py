@@ -236,6 +236,13 @@ def inspect_entry(project, storage, config, task_id, alias, entry):
         blockers.append("есть staged, unstaged или новые файлы")
     if ignored:
         blockers.append("есть игнорируемые файлы; их сохранность не подтверждена")
+    # Merge с тем же итоговым деревом может выглядеть чистым в porcelain.
+    # Удаление worktree всё равно потеряет его незавершённый Git-контекст.
+    for operation in ("MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply", "sequencer"):
+        location = Path(git_text(expected, "rev-parse", "--git-path", operation))
+        if (location if location.is_absolute() else expected / location).exists():
+            blockers.append("есть незавершённая Git-операция; сначала завершите или отмените её")
+            break
     if git_text(expected, "submodule", "status"):
         blockers.append("репозиторий содержит submodule; автоматическая очистка не поддерживается")
     head = commit_sha(expected, "HEAD")

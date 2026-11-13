@@ -537,7 +537,7 @@ def git_session_overrides(project, base, autonomy_settings=None):
         "KIT_GIT_PROJECT": str(project), "KIT_MCP_ALLOWED_HOSTS": ",".join(local_settings.mcp_hosts('git')),
         "KIT_PYTHON": sys.executable})
     scoped["tools"] = {f"kit_git_{action}": {"approval_mode": "prompt"}
-                       for action in ("init", "configure", "prepare", "commit", "push", "cleanup")}
+                       for action in ("init", "configure", "prepare", "commit", "push", "cleanup", "fetch", "merge", "merge_abort")}
     if autonomy_settings:
         scoped["tools"]["kit_git_prepare"]["approval_mode"] = "approve"
         if autonomy_settings["local_commit"] == "auto":
@@ -550,7 +550,7 @@ def git_session_overrides(project, base, autonomy_settings=None):
                      "Роли выполняй последовательно. Для координации задач по PRD прочитай skill feature-hub; "
                      "для планирования/реализации одной задачи — plan-feature; для QA — verify-feature; "
                      "для PR — review-pr. Проект ограничен текущим каталогом. "
-                     "При доступном kit_git_discover используй kit_git_* для init, подготовки worktree, коммита, push и очистки; "
+                     "При доступном kit_git_discover используй kit_git_* для init, подготовки worktree, fetch, слияния, коммита, push и очистки; "
                      "не передавай их в обычный shell. Прочитай режим проекта через kit_git_discover: "
                      "current использует исходную папку выбранной ветки без создания worktree; "
                      "для worktree сначала согласуй репозитории и базовые ветки (обычно main). "

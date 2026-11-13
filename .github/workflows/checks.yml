@@ -28,3 +28,7 @@ jobs:
           python3 -m unittest discover -s tests -p test_mcp_config.py -v
           python3 -m unittest discover -s tests -p test_local_settings.py -v
           python3 -m unittest discover -s tests -p test_publication.py -v
+      - name: Check local Git workflows without external services
+        run: |
+          python3 -m unittest discover -s tests -p test_git_backend.py -v
+          python3 -m unittest discover -s tests -p test_git_merge.py -v

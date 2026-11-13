@@ -126,13 +126,14 @@ class AutonomyTests(unittest.TestCase):
         args = permissions.git_session_overrides(self.root, base, autonomy_settings=settings)
         server = tomllib.loads('server=' + args[1].split('=', 1)[1])["server"]
         self.assertEqual(server["tools"]["kit_git_prepare"]["approval_mode"], "approve")
-        for action in ("init", "configure", "commit", "push", "cleanup"):
+        for action in ("init", "configure", "commit", "push", "cleanup", "fetch", "merge", "merge_abort"):
             self.assertEqual(server["tools"]["kit_git_" + action]["approval_mode"], "prompt")
         settings["local_commit"] = "auto"
         args = permissions.git_session_overrides(self.root, base, autonomy_settings=settings)
         server = tomllib.loads('server=' + args[1].split('=', 1)[1])["server"]
         self.assertEqual(server["tools"]["kit_git_commit"]["approval_mode"], "approve")
-        self.assertEqual(server["tools"]["kit_git_push"]["approval_mode"], "prompt")
+        for action in ("push", "fetch", "merge", "merge_abort"):
+            self.assertEqual(server["tools"]["kit_git_" + action]["approval_mode"], "prompt")
 
     def test_native_rules_require_risky_actions_without_blanket_interpreter_allow(self):
         self.apply()

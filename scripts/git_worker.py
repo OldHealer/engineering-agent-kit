@@ -17,6 +17,7 @@ from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 import kit
+from git_merge import MergeOperations
 
 
 class GitError(ValueError):
@@ -45,7 +46,11 @@ def safe_file(value):
     return path
 
 
-class WorkspaceGit:
+class WorkspaceGit(MergeOperations):
+    error_type = GitError
+    safe_file = staticmethod(safe_file)
+    state_digest = staticmethod(digest)
+
     def __init__(self, project, connections=None, local_test=False):
         self.project = Path(project).resolve(strict=True)
         require(self.project.is_dir(), "Проект не найден")
@@ -108,11 +113,11 @@ class WorkspaceGit:
     def raw(self, repo, *args, check=True):
         environment = {"PATH": os.defpath, "HOME": "/nonexistent", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8",
                        "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_TERMINAL_PROMPT": "0",
-                       "GIT_NO_REPLACE_OBJECTS": "1"}
+                       "GIT_NO_REPLACE_OBJECTS": "1", "GIT_OPTIONAL_LOCKS": "0"}
         options = ["core.hooksPath=/dev/null", "core.fsmonitor=false", "submodule.recurse=false",
                    "credential.helper=", "credential.interactive=false", "http.followRedirects=false",
                    "http.sslVerify=true", "http.proxy=", "protocol.allow=never", "protocol.https.allow=always",
-                   "fetch.fsckObjects=true", "fetch.recurseSubmodules=false", "maintenance.auto=false", "gc.auto=0"]
+                   "fetch.fsckObjects=true", "fetch.recurseSubmodules=false", "maintenance.auto=false", "gc.auto=0", "rerere.enabled=false"]
         if self.local_test:
             options += ["protocol.file.allow=always", "protocol.http.allow=always"]
         descriptor = None
@@ -156,7 +161,7 @@ class WorkspaceGit:
             old = self.authorization
             self.authorization = (url, header) if header else None
             try:
-                return self.raw(repo, "fetch", "--no-tags", "--no-recurse-submodules", url, *args[3:], check=check)
+                return self.raw(repo, "fetch", "--no-tags", "--no-recurse-submodules", "--refmap=", url, *args[3:], check=check)
             finally:
                 self.authorization = old
         return self.raw(repo, *args, check=check)
@@ -305,8 +310,23 @@ class WorkspaceGit:
         require(not any(".engineering-kit" in Path(name).parts for name in tracked.split("\0") if name),
                 "Личные артефакты .engineering-kit уже отслеживаются Git; разберите их отдельно до commit/push")
 
+    def commit_identity(self, repo, request):
+        message = request["message"]
+        require(isinstance(message, str) and message.strip() and len(message) <= 16000 and "\x00" not in message, "Некорректный текст коммита")
+        _, config = self.validate_registry()
+        author = request.get("author") or config.get("author") or {
+            key: self.raw(repo, "config", "--local", "--no-includes", "--get", f"user.{key}", check=False).stdout.decode().strip()
+            for key in ("name", "email")}
+        require(set(author) == {"name", "email"} and all(isinstance(value, str) and value.strip() and
+                not any(char in value for char in "\r\n\x00<>") for value in author.values()),
+                "Нужны имя и email автора; спросите пользователя один раз и передайте author")
+        return author, message
+
     def snapshot(self, request):
         repo, entry = self.entry(request["id"], request["repo"])
+        require(request.get("mode", "normal") == "normal" and "resolved_files" not in request, "Неизвестный режим обычного commit")
+        require(not self.merge_flags(repo), "Незавершённая Git-операция: для merge нужен mode=merge")
+        require(isinstance(request.get("files"), list), "Выберите явный список files")
         files = sorted(set(request["files"]))
         require(files and len(files) <= 1000, "Выберите явный непустой список файлов")
         require(not self.git(repo, "diff", "--cached", "--name-only", "-z").stdout, "Индекс уже содержит изменения; сначала разберите их отдельно")
@@ -328,15 +348,7 @@ class WorkspaceGit:
                         "Удалённый файл не отслеживался Git")
                 checksum, mode, blob = None, None, None
             snapshots.append({"path": name, "sha256": checksum, "mode": mode, "git_blob": blob})
-        message = request["message"]
-        require(isinstance(message, str) and message.strip() and len(message) <= 16000 and "\x00" not in message, "Некорректный текст коммита")
-        _, config = self.validate_registry()
-        author = request.get("author") or config.get("author") or {
-            key: self.raw(repo, "config", "--local", "--no-includes", "--get", f"user.{key}", check=False).stdout.decode().strip()
-            for key in ("name", "email")}
-        require(set(author) == {"name", "email"} and all(isinstance(value, str) and value.strip() and
-                not any(char in value for char in "\r\n\x00<>") for value in author.values()),
-                "Нужны имя и email автора; спросите пользователя один раз и передайте author")
+        author, message = self.commit_identity(repo, request)
         return {"repo": request["repo"], "id": request["id"], "branch": entry["branch"],
                 "workspace": entry.get("workspace", "worktree"), "path": str(repo),
                 "head": self.text(repo, "rev-parse", "HEAD"), "files": snapshots, "message": message, "author": author}
@@ -411,7 +423,7 @@ class WorkspaceGit:
 
     def dispatch(self, request):
         action = request["action"]
-        require(action not in {"init", "configure", "prepare", "commit", "push", "cleanup"} or request.get("confirm") is True,
+        require(action not in {"init", "configure", "prepare", "commit", "push", "cleanup", "fetch", "merge", "merge_abort"} or request.get("confirm") is True,
                 "Требуется явное согласие пользователя на указанное действие")
         with self.lock():
             if action == "discover":
@@ -430,6 +442,12 @@ class WorkspaceGit:
                     return {"project": str(self.project), "repositories": list(config["repos"]), "already_registered": True}
                 return kit.init_project(SimpleNamespace(project=self.project, repo=request.get("repos")))
             self.validate_registry()
+            if action == "fetch":
+                return self.fetch_revision(request)
+            if action in {"merge_preview", "merge"}:
+                return self.merge_start(request)
+            if action in {"merge_abort_preview", "merge_abort"}:
+                return self.merge_abort(request)
             if action == "configure":
                 return self.configure(request)
             if action == "prepare":
@@ -446,7 +464,14 @@ class WorkspaceGit:
             if action == "status":
                 if request.get("id"):
                     self.state(request["id"])
-                return kit.status(SimpleNamespace(project=self.project, id=request.get("id")))
+                result = kit.status(SimpleNamespace(project=self.project, id=request.get("id")))
+                if request.get("id"):
+                    for item in result["entries"]:
+                        try:
+                            item["merge"] = self.merge_status({"id": request["id"], "repo": item["repo"]})
+                        except (GitError, kit.KitError) as error:
+                            item["merge"] = {"blocked": True, "reason": str(error)}
+                return result
             if action == "cleanup_preview" or action == "cleanup":
                 # Поля реестра не должны перенаправить удаление или чтение за корень сессии.
                 _, _, _, _, state = self.state(request["id"])
@@ -457,7 +482,7 @@ class WorkspaceGit:
                     confirm=request.get("confirmation_token") if action == "cleanup" else None,
                     idle_confirmed=request.get("idle_confirmed", False)))
             if action in {"commit_preview", "commit"}:
-                return self.commit(request)
+                return self.merge_commit(request) if request.get("mode") == "merge" else self.commit(request)
             if action in {"push_preview", "push"}:
                 return self.push(request)
             if action == "remote_check":
@@ -486,7 +511,7 @@ def main():
     args = parser.parse_args()
     try:
         request = json.load(sys.stdin)
-        require(request.get("action") not in {"init", "configure", "prepare", "commit", "push", "cleanup"} or request.get("confirm") is True,
+        require(request.get("action") not in {"init", "configure", "prepare", "commit", "push", "cleanup", "fetch", "merge", "merge_abort"} or request.get("confirm") is True,
                 "Требуется явное согласие пользователя на указанное действие")
         result = WorkspaceGit(args.project, request.pop("_connections", {})).dispatch(request)
         print(json.dumps({"ok": True, "result": result}, ensure_ascii=False))

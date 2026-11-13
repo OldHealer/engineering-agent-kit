@@ -13,12 +13,14 @@ export function registerGit(server, deps, context) {
   const repo = task.extend({ repo: name });
   const confirmed = { confirm: z.boolean().default(false) };
   const token = z.string().regex(/^[a-f0-9]{16,64}$/);
-  const commit = repo.extend({ files: z.array(z.string().min(1)).min(1).max(1000), message: z.string().min(1).max(16000),
+  const paths = z.array(z.string().min(1)).max(1000);
+  const commit = repo.extend({ mode: z.enum(['normal', 'merge']).default('normal'),
+    files: paths.min(1).optional(), resolved_files: paths.optional(), message: z.string().min(1).max(16000),
     author: z.object({ name: z.string().min(1), email: z.string().min(1) }).optional() });
   let pending = Promise.resolve();
   const execute = (action, input) => new Promise((resolve, reject) => {
     const connections = {};
-    if (['remote_check', 'push_preview', 'push'].includes(action) || action === 'prepare' && input.fetch !== false) {
+    if (['remote_check', 'push_preview', 'push', 'fetch'].includes(action) || action === 'prepare' && input.fetch !== false) {
       for (const service of ['bitbucket', 'github']) {
         try { connections[service] = context.connection(service); }
         catch (error) {
@@ -73,12 +75,21 @@ export function registerGit(server, deps, context) {
   register('configure', 'После согласия сохранить режим проекта: current для исходной папки или worktree. Ветки не переключает; main/master/целевая ветка для прямой разработки запрещены.',
     z.object({ workspace: z.enum(['current', 'worktree']), development_branch: z.string().min(1),
       target_branch: z.string().min(1), ...confirmed }), true);
-  register('status', 'Задачи, режимы и состояние рабочих папок проекта, без чтения содержимого файлов', z.object({ id: name.optional() }));
+  register('status', 'Задачи и рабочие папки проекта. С id показывает merge, обоих родителей, конфликтные пути и готовность завершения; содержимое файлов не читает', z.object({ id: name.optional() }));
   register('prepare', 'Начать задачу согласно настройкам проекта. current привязывает исходную папку без worktree/fetch; worktree создаёт отдельную копию. switch_branch/include_changes допустимы только после отдельного согласования.',
     repo.extend({ mode: z.enum(['review', 'feature']).default('feature'), base: z.string().min(1).optional(),
       workspace: z.enum(['current', 'worktree']).optional(), head: z.string().min(1).optional(), fetch: z.boolean().optional(),
       switch_branch: z.boolean().default(false), include_changes: z.boolean().default(false), ...confirmed }), true);
-  register('commit_preview', 'Предпросмотр точного состава и текста коммита. Не выполняет commit; author задаётся явно, если его нет в локальном Git config.', commit);
+  register('fetch', 'Обновить только origin/branch зарегистрированного репозитория через безопасную авторизацию. Без checkout, merge и нового worktree; non-fast-forward tracking ref отклоняется.',
+    z.object({ repo: name, branch: z.string().min(1).default('main'), ...confirmed }), true);
+  const merge = repo.extend({ revision: z.string().min(1).default('origin/main') });
+  register('merge_preview', 'Показать точные SHA, индекс, блокировки и сценарий слияния после fetch. Не меняет рабочую папку/индекс и не прогнозирует конфликты.', merge);
+  register('merge', 'Слить подтверждённый SHA в ветку задачи без commit и fast-forward HEAD. Конфликты возвращаются как ожидаемый результат. Push не выполняется.',
+    merge.extend({ confirmation_token: token, ...confirmed }), true);
+  register('merge_abort_preview', 'Показать полный список теряемых правок управляемого merge; посторонние изменения блокируют отмену.', repo);
+  register('merge_abort', 'Отменить только управляемый merge после подтверждения потерь. Без reset --hard, stash и удаления посторонних данных.',
+    repo.extend({ confirmation_token: token, ...confirmed }), true, true);
+  register('commit_preview', 'Предпросмотр состава, текста и родителей. mode=merge показывает полный результат; resolved_files явно перечисляет исправленные unmerged пути; files запрещён. Не выполняет commit; author задаётся явно, если его нет в локальном Git config.', commit);
   register('commit', 'Создать коммит только после согласования показанного состава и текста. Изменение HEAD/файлов/текста отменяет подтверждение.',
     commit.extend({ confirmation_token: token, ...confirmed }), true);
   register('push_preview', 'Предпросмотр SHA, ветки и HTTPS-адреса. В current читает удалённую ветку для проверки всех неотправленных коммитов; ничего не публикует.', repo);
