@@ -13,7 +13,7 @@ import tempfile
 
 
 KIT_ROOT = Path(__file__).resolve().parents[1]
-SKILLS = ("review-pr", "plan-feature", "investigate-bug", "workspace-cleanup", "feature-hub", "verify-feature", "library-docs")
+SKILLS = ("review-pr", "plan-feature", "investigate-bug", "workspace-cleanup", "feature-hub", "verify-feature", "library-docs", "precommit")
 GIT_EXECUTOR = None
 NAME = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}\Z")
 

@@ -30,6 +30,20 @@ class McpConfigTests(unittest.TestCase):
             self.assertEqual(module.configure(path, Path("/example/ai-box"), "/example/node")["added"], [])
             self.assertEqual(path.read_bytes(), before)
 
+    def test_qa_registration_is_explicit_disabled_and_idempotent(self):
+        with tempfile.TemporaryDirectory(prefix="kit-qa-config-") as directory:
+            path = Path(directory)/"config.toml"
+            module.configure(path, Path("/example/ai-box"), "/example/node")
+            self.assertNotIn("kit-qa", tomllib.loads(path.read_text())["mcp_servers"])
+            result = module.configure(path, Path("/example/ai-box"), "/example/node", with_qa=True)
+            self.assertEqual(result["added"], ["kit-qa"])
+            qa = tomllib.loads(path.read_text())["mcp_servers"]["kit-qa"]
+            self.assertFalse(qa["enabled"])
+            self.assertNotIn("env", qa)
+            before = path.read_bytes()
+            self.assertEqual(module.configure(path, Path("/example/ai-box"), "/example/node", with_qa=True)["added"], [])
+            self.assertEqual(path.read_bytes(), before)
+
     def test_conflicting_server_is_not_overwritten(self):
         with tempfile.TemporaryDirectory(prefix="kit-mcp-config-test-") as directory:
             path = Path(directory) / "config.toml"

@@ -18,8 +18,8 @@ def identity(path):
     if path.resolve() != path:
         raise ValueError("Разрешение модуля не поддерживает симлинки в его пути")
     info = path.lstat()
-    if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o022:
-        raise ValueError("Модуль должен быть обычным файлом пользователя без записи для группы/остальных")
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o022 or info.st_nlink != 1:
+        raise ValueError("Модуль должен быть обычным файлом пользователя без hard links и записи для группы/остальных")
     return [info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_mode, info.st_nlink]
 
 

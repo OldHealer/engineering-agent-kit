@@ -194,7 +194,7 @@ class WorkspaceTests(unittest.TestCase):
         installed = kit.install_skills(args)
         self.assertEqual(kit.install_skills(args), installed)
         expected = {"review-pr", "plan-feature", "investigate-bug", "workspace-cleanup",
-                    "feature-hub", "verify-feature", "library-docs"}
+                    "feature-hub", "verify-feature", "library-docs", "precommit"}
         self.assertEqual(set(installed["installed"]), expected)
         self.assertEqual({path.name for path in destination.iterdir()}, expected)
         for name in expected:
@@ -208,6 +208,16 @@ class WorkspaceTests(unittest.TestCase):
             kit.install_skills(args)
         self.assertFalse((other / "plan-feature").exists())
         self.assertFalse((other / "feature-hub").exists())
+
+        conflict = Path(self.temporary.name) / "precommit-conflict"
+        (conflict / "precommit").mkdir(parents=True)
+        custom = conflict / "precommit/SKILL.md"
+        custom.write_text("Existing user skill\n")
+        args.dest = str(conflict)
+        with self.assertRaises(kit.KitError):
+            kit.install_skills(args)
+        self.assertEqual(custom.read_text(), "Existing user skill\n")
+        self.assertEqual({path.name for path in conflict.iterdir()}, {"precommit"})
 
 
 if __name__ == "__main__":

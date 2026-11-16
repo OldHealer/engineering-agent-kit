@@ -18,7 +18,7 @@ CONTEXT7_URL = "https://mcp.context7.com/mcp"
 
 def server_config(service, ai_box, node):
     return {"command": node, "args": [str(KIT / "scripts/mcp-server.mjs"), service, "--ai-box", str(ai_box)],
-            "enabled": service != "git", "startup_timeout_sec": 30, "tool_timeout_sec": 60,
+            "enabled": service not in {"git", "qa"}, "startup_timeout_sec": 30, "tool_timeout_sec": 180 if service == "qa" else 60,
             "default_tools_approval_mode": "writes"}
 
 
@@ -27,13 +27,15 @@ def context7_config():
             "startup_timeout_sec": 30, "tool_timeout_sec": 60, "default_tools_approval_mode": "writes"}
 
 
-def configure(config_path, ai_box, node, with_context7=False):
+def configure(config_path, ai_box, node, with_context7=False, with_qa=False):
     original = config_path.read_text() if config_path.exists() else ""
     parsed = tomllib.loads(original)
     servers = parsed.get("mcp_servers", {})
     added = []
     blocks = []
     entries = {f"kit-{service}": server_config(service, ai_box, node) for service in SERVICES}
+    if with_qa:
+        entries["kit-qa"] = server_config("qa", ai_box, node)
     if with_context7:
         entries["context7"] = context7_config()
     for name, expected in entries.items():
@@ -62,6 +64,7 @@ def main():
     parser.add_argument("--config", type=Path, default=codex_home / "config.toml")
     parser.add_argument("--ai-box", type=Path, default=local_settings.ai_box())
     parser.add_argument("--with-context7", action="store_true", help="Добавить удалённый MCP публичной документации без локальных пакетов и токенов")
+    parser.add_argument("--with-qa", action="store_true", help="Opt-in isolated QA tools; no service starts")
     args = parser.parse_args()
     node = shutil.which("node")
     required = ("packages/bitbucket/dist/client.js", "packages/jira/dist/client.js",
@@ -70,7 +73,7 @@ def main():
         print("Нет Node.js или готовых пакетов ai-box; ничего не установлено", file=sys.stderr)
         return 1
     try:
-        result = configure(args.config, args.ai_box.resolve(), node, with_context7=args.with_context7)
+        result = configure(args.config, args.ai_box.resolve(), node, with_context7=args.with_context7, with_qa=args.with_qa)
     except (OSError, ValueError):
         print("Не удалось обновить конфигурацию MCP; существующие записи сохранены. Проверьте права и совпадение записей kit.", file=sys.stderr)
         return 1

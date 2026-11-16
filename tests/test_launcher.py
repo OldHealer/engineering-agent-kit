@@ -39,6 +39,7 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual((settings / "skills/feature-hub").resolve(), launcher.kit.KIT_ROOT / "skills/feature-hub")
             self.assertEqual((settings / "skills/verify-feature").resolve(), launcher.kit.KIT_ROOT / "skills/verify-feature")
             self.assertEqual((settings / "skills/library-docs").resolve(), launcher.kit.KIT_ROOT / "skills/library-docs")
+            self.assertEqual((settings / "skills/precommit").resolve(), launcher.kit.KIT_ROOT / "skills/precommit")
             args.with_context7 = True
             self.assertEqual(launcher.install(args)["mcp_added"], ["context7"])
             updated = base.read_bytes()

@@ -13,6 +13,7 @@ import unittest
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts/permissions.py"
 sys.path.insert(0, str(SCRIPT.parent))
+codex_runtime = importlib.import_module("codex_runtime")
 SPEC = importlib.util.spec_from_file_location("kit_permissions", SCRIPT)
 permissions = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(permissions)
@@ -306,35 +307,39 @@ print(json.dumps({'source': (root/'source.txt').read_text() == 'fixture source',
                   'late_env_denied':denied(root/'new-directory/.env.late'),
                   'volume_cannot_be_unlocked':volume_locked}))
 '''
-                result = subprocess.run(["codex", *arguments, "sandbox", "--permission-profile", permissions.NAME,
-                    "--include-managed-config", "--cd", str(project), "--", "/usr/bin/python3", "-I", "-c", code],
-                    capture_output=True, text=True, env=environment)
-                self.assertEqual(result.returncode, 0, result.stderr[-1500:])
-                self.assertTrue(all(json.loads(result.stdout).values()))
-                self.assertEqual(blocked.stat().st_mode & 0o777, 0)
-                unexpected = project / "unlisted-volume"
-                unexpected.mkdir()
-                unexpected.chmod(0)
-                try:
-                    late_code = '''from pathlib import Path
+                with tempfile.TemporaryDirectory(prefix="kit-native-cache-") as cache, codex_runtime.scanner_runtime(
+                        Path(shutil.which("codex")).resolve(), permissions.SCAN_BIN / "rg",
+                        environment, Path(cache) / "runtime", project) as runtime:
+                    runtime_arguments = arguments + permissions.runtime_overrides(arguments, runtime)
+                    result = subprocess.run([str(runtime.executable), *runtime_arguments, "sandbox", "--permission-profile", permissions.NAME,
+                        "--include-managed-config", "--cd", str(project), "--", "/usr/bin/python3", "-I", "-c", code],
+                        capture_output=True, text=True, env=environment, pass_fds=runtime.pass_fds, timeout=40)
+                    self.assertEqual(result.returncode, 0, result.stderr[-1500:])
+                    self.assertTrue(all(json.loads(result.stdout).values()))
+                    self.assertEqual(blocked.stat().st_mode & 0o777, 0)
+                    unexpected = project / "unlisted-volume"
+                    unexpected.mkdir()
+                    unexpected.chmod(0)
+                    try:
+                        late_code = '''from pathlib import Path
 try:
     Path('unlisted-volume').chmod(0o700)
     print('unlocked')
 except OSError:
     print('closed')
 '''
-                    checked = subprocess.run(["codex", *arguments, "sandbox", "--permission-profile", permissions.NAME,
-                        "--include-managed-config", "--cd", str(project), "--", "/usr/bin/python3", "-I", "-c", late_code],
-                        capture_output=True, text=True, env=environment)
-                    if permissions.scanner_install.installed():
-                        self.assertEqual(checked.returncode, 0, checked.stderr[-1500:])
-                        self.assertEqual(checked.stdout.strip(), "closed")
-                        self.assertEqual(unexpected.stat().st_mode & 0o777, 0)
-                    else:
-                        self.assertNotEqual(checked.returncode, 0)
-                        self.assertIn("ripgrep unreadable glob scan failed", checked.stderr)
-                finally:
-                    unexpected.chmod(0o700)
+                        checked = subprocess.run([str(runtime.executable), *runtime_arguments, "sandbox", "--permission-profile", permissions.NAME,
+                            "--include-managed-config", "--cd", str(project), "--", "/usr/bin/python3", "-I", "-c", late_code],
+                            capture_output=True, text=True, env=environment, pass_fds=runtime.pass_fds, timeout=40)
+                        if permissions.scanner_install.installed():
+                            self.assertEqual(checked.returncode, 0, checked.stderr[-1500:])
+                            self.assertEqual(checked.stdout.strip(), "closed")
+                            self.assertEqual(unexpected.stat().st_mode & 0o777, 0)
+                        else:
+                            self.assertNotEqual(checked.returncode, 0)
+                            self.assertIn("ripgrep unreadable glob scan failed", checked.stderr)
+                    finally:
+                        unexpected.chmod(0o700)
             finally:
                 blocked.chmod(0o700)
 
