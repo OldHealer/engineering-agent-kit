@@ -143,6 +143,21 @@ print(json.dumps(result))
         result = self.probe(self.approvals)
         self.assertFalse(result['modules'][0])
 
+    def test_hard_link_alias_cannot_be_approved_as_a_code_module(self):
+        module = self.modules[0]
+        module.unlink()
+        os.link(self.protected[3], module)
+        with self.assertRaisesRegex(ValueError, 'hard links'):
+            file_access.approve(module)
+        self.assertFalse(file_access.unchanged(self.approvals[0], provenance=True))
+
+    def test_new_hard_link_revokes_existing_approval(self):
+        module = self.modules[0]
+        os.link(module, self.root / 'alias.py')
+        self.assertFalse(file_access.unchanged(self.approvals[0]))
+        with self.assertRaisesRegex(ValueError, 'hard links'):
+            file_access.approve(module)
+
     def test_private_data_cannot_be_approved_by_changing_its_extension(self):
         for path in [self.repo / 'credentials.py', self.repo / 'secrets.ts', self.modules[-1].with_name('secret_data.py')]:
             with self.assertRaises(ValueError):

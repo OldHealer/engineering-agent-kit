@@ -19,6 +19,7 @@ import permissions
 import scanner_install
 import network_policy
 import codex_runtime
+import diagnostics
 
 
 def session_identifier(value):
@@ -51,7 +52,7 @@ def install(args):
     permissions.preflight(Path.cwd(), args.codex_dir)
     skills = kit.install_skills(SimpleNamespace(dest=str(args.codex_dir / "skills")))
     mcp = configure_mcp.configure(args.codex_dir / "config.toml", args.ai_box.resolve(), node,
-                                  with_context7=getattr(args, "with_context7", False))
+                                  with_context7=getattr(args, "with_context7", False), with_qa=getattr(args, "with_qa", False))
     profile = permissions.install(args.codex_dir, include_rules=args.with_command_rules, dependencies=args.ai_box.resolve())
     args.bin_dir.mkdir(parents=True, exist_ok=True)
     if not destination.is_symlink():
@@ -70,6 +71,7 @@ def main():
     setup.add_argument("--codex-dir", type=Path, default=permissions.codex_home())
     setup.add_argument("--bin-dir", type=Path, default=Path.home() / ".local/bin")
     setup.add_argument("--with-command-rules", action="store_true", help="Установить правила для всех будущих сессий пользователя")
+    setup.add_argument("--with-qa", action="store_true", help="Register isolated QA tools, disabled until kit launch")
     setup.add_argument("--with-context7", action="store_true", help="Подключить удалённый MCP публичной документации")
     start = commands.add_parser("start", help="Запустить новую ограниченную сессию из проекта")
     start.add_argument("--project", type=Path, default=Path.cwd())
@@ -81,6 +83,9 @@ def main():
     resume.add_argument('--kit-development', action='store_true')
     resume.set_defaults(resume_session=True)
     commands.add_parser("rollback", help="Показать команду отката установленного профиля")
+    doctor = commands.add_parser("doctor", help="Read-only startup diagnosis; no settings changed")
+    doctor.add_argument("--project", type=Path, default=Path.cwd())
+    doctor.add_argument("--codex-dir", type=Path, default=permissions.codex_home())
     commands.add_parser("scanner", help="Предпросмотр root-owned scanner для подтверждённых команд")
     network = commands.add_parser("network", help="Показать сетевую политику и недостающие домены без выдачи доступа")
     network.add_argument('--project', type=Path, default=Path.cwd())
@@ -121,6 +126,10 @@ def main():
             profile = permissions.load_structure(args.codex_dir / (permissions.NAME + '.config.toml'))
             domains = profile.get('permissions', {}).get(permissions.NAME, {}).get('network', {}).get('domains', {})
             print(json.dumps(network_policy.inspect(args.project, settings.get('network'), domains), ensure_ascii=False, indent=2))
+        elif args.action == "doctor":
+            result = diagnostics.inspect(args.project, args.codex_dir)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result["ready"] else 1
         elif args.action == "scanner":
             print(json.dumps(scanner_install.plan(), ensure_ascii=False, indent=2))
         elif args.action == "rollback":

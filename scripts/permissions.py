@@ -81,10 +81,10 @@ def denied_paths(home=None, kit=None):
     home = home or Path.home()
     kit = kit or KIT
     paths = [home / item for item in (*SECRET_DIRS, *SECRET_FILES, *SHELL_FILES)]
-    paths.extend([home / ".codex/sessions", home / ".codex/log", home / ".codex/logs",
+    paths.extend([home / ".codex/sessions", home / ".codex/log", home / ".codex/logs", home / ".codex/kit-qa",
                   kit / ".engineering-kit/connections.env"])
     if os.environ.get("CODEX_HOME"):
-        paths.extend(codex_home() / item for item in ("auth.json", "config.toml", "sessions", "log", "logs"))
+        paths.extend(codex_home() / item for item in ("auth.json", "config.toml", "sessions", "log", "logs", "kit-qa"))
     result = set()
     for item in paths:
         result.add(str(item.absolute()))
@@ -394,6 +394,9 @@ def project_overrides(project, allow_kit_edit=False, extra_denied=(), protected_
     for root in artifact_roots:
         filesystem[root] = {".": "write", **dict.fromkeys(ARTIFACT_GLOBS, "deny"),
                             ".git": "read", ".agents": "read", ".codex": "read", ".aws": "read"}
+    qa_store = codex_home()/"kit-qa"
+    if qa_store.exists() and not qa_store.is_symlink():
+        filesystem[str(qa_store)] = "deny"
     for directory in protected_paths:
         filesystem[str(directory.resolve())] = {".": "read", **dict.fromkeys(GLOBS, "deny")}
 
@@ -569,6 +572,22 @@ def git_session_overrides(project, base, autonomy_settings=None):
     return overrides
 
 
+def qa_session_overrides(project, base):
+    server = base.get('mcp_servers', {}).get('kit-qa')
+    if server is None:
+        return []
+    node = shutil.which('node')
+    if not node or server.get('command') != node or server.get('args', [])[:2] != [str(KIT/'scripts/mcp-server.mjs'), 'qa']:
+        raise ProfileError('QA transport differs; review configuration separately')
+    store = codex_home()/'kit-qa'
+    scoped = dict(server)
+    scoped.update(enabled=True, env={'KIT_QA_PROJECT': str(project), 'KIT_QA_STORE': str(store)},
+                  default_tools_approval_mode='writes')
+    scoped['tools'] = {f'kit_qa_{action}': {'approval_mode': 'prompt' if action in {'grant', 'renew'} else 'approve'}
+                       for action in ('preview', 'grant', 'renew_preview', 'renew', 'status', 'start', 'stop', 'restart', 'check', 'cleanup')}
+    return ['-c', 'mcp_servers.kit-qa='+toml_value(scoped)]
+
+
 def session_command(executable, project, overrides, resume=False, session_id=None, last=False, isolated_backend=False):
     if session_id is not None and last:
         raise ProfileError("Для resume выберите ID сессии или --last")
@@ -612,6 +631,7 @@ def run(args):
                                   network_settings=policy.get('network') if policy else None,
                                   installed_domains=installed_profile.get('network', {}).get('domains', {}))
     overrides += git_session_overrides(project, base, autonomy_settings=policy)
+    overrides += qa_session_overrides(project, base)
     if selected_native is not None:
         overrides += ['-c', 'check_for_update_on_startup=false']
     network = network_policy.inspect(project, policy.get('network') if policy else None,

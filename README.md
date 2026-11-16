@@ -209,6 +209,17 @@ The hub does not run on a schedule or receive results automatically. Ask it to r
 | `$investigate-bug` | Find the cause of a bug |
 | `$workspace-cleanup` | Check worktrees and remove approved folders |
 | `$library-docs` | Find API documentation for the library version in your project |
+| `$precommit` | Check files and project checks before a commit |
+
+Before a commit, use:
+
+```text
+$precommit Check the current task changes. Do not change code or the index.
+```
+
+It checks the selected files, new files, protected paths, and the checks required by your project. It supports normal commits and pending Kit merges. It reports failed or missing checks and saves the result in your task report. It does not stage, commit, or push. Project rules decide the tools and style; Gradient paths and company settings are not required.
+
+After updating Kit, run `python3 scripts/kit.py install-skills` from the Kit folder to add new skills. It keeps existing user skills and refuses name conflicts. Open a new session if the skill is not available in the current one.
 
 Context7 is a separate, optional connection. Do not send source code, secrets, or private task details in public documentation requests.
 
@@ -288,6 +299,14 @@ Merge keeps the old HEAD until you approve the commit, even when a fast-forward 
 
 See [the Git MCP workflow](agents/integrations.md#обновление-ветки-задачи-из-origin) for tool arguments and limits. After updating Kit, open a new session with `kit start --project /absolute/path/to/project`; an existing chat does not gain new tools automatically.
 
+## Fewer repeated approvals
+
+Use `kit doctor --project /absolute/path/to/project` to check startup metadata before changing permissions. It reports a missing folder, stale worktree registration, old sandbox settings, or an unsupported runtime. It does not fix settings or prove that every tool works.
+
+Optional QA tools can be registered with `kit install --with-qa` after you review the setup. Open a new kit session after registration. Approve one exact QA contract, then use `kit_qa_start`, `kit_qa_check`, `kit_qa_restart`, `kit_qa_stop`, and `kit_qa_cleanup` for that run. No general Python, Bash, or Docker permission is added.
+
+This first version needs Linux Docker Engine 28+ and an installed image pinned by SHA256. It creates one isolated container, network, and anonymous test volume. It does not publish ports, mount host folders, pull/build images, or use working databases. Resource IDs and ownership are checked before operations. Read [the QA workflow and limits](agents/permissions.md#изолированный-qa-lifecycle-opt-in) before use. Expired permission needs a new approved renewal; changed scope needs a new contract. Push, publications, working databases, and user data still need separate approval.
+
 ## MVP limits
 
 - Full mode targets Linux/WSL. Windows without WSL and macOS have not been tested.
@@ -331,7 +350,7 @@ Codex, bubblewrap, and V8 binaries, and ai-box dependencies, are not included in
 
 ```text
 agents/       roles, workflows, and integration rules
-skills/       seven user skills
+skills/       eight user skills
 scripts/      setup, launch, MCP, and permissions
 bin/          the kit command and scanner adapters
 permissions/  permission templates
